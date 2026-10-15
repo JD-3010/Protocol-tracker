@@ -3125,7 +3125,7 @@ function renderDashboard(){
         if(!localMatches(data.payload)){
           // Cloud data wins when a saved cloud copy already exists; the user said this tracker is starting fresh.
           TRACKER_KEYS.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(data.payload,k)) localStorage.setItem(k,data.payload[k]); else localStorage.removeItem(k); });
-          status('Cloud data loaded. Refreshing the tracker…'); cloudReady=true; installStorageSync(); setTimeout(()=>location.reload(),500); return;
+          status('Cloud data loaded. Automatic refresh paused.'); cloudReady = false; return;
         }
         status('Cloud data is up to date.');
       } else {
