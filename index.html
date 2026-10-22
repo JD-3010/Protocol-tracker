@@ -572,7 +572,10 @@
       <button class="jumpbtn" id="jumpFinToday">TODAY</button>
     </div>
 
+    <div class="statshead" style="margin-top:10px;">Overall Total — Up to This Day</div>
     <div class="summary3" id="finTotalsGrid"></div>
+    <div class="statshead" style="margin-top:10px;">This Day Only</div>
+    <div class="summary3" id="finDailyTotalsGrid"></div>
 
     <div class="mealcard">
       <div class="mealhead">
@@ -1850,6 +1853,7 @@ let finState = { viewDate: todayYmd(), lastAutoDate: todayYmd(), logs:{}, quick:
 const EXPENSE_CATS = ['Food','Petrol','Miscellaneous','Tithes','Giving to Family','Lending','Other'];
 const CATEGORY_DETAIL = {
   'Food': { label:'What food?', prefix:'' },
+  'Miscellaneous': { label:'Description (what was this expense for?)', prefix:'' },
   'Tithes': { label:'To whom?', prefix:'to ' },
   'Giving to Family': { label:'To whom?', prefix:'to ' },
   'Lending': { label:'To whom?', prefix:'to ' },
@@ -1897,17 +1901,29 @@ function renderFinDayNav(){
 function renderFinance(){
   renderFinDayNav();
   const day = getFinDay(finState.viewDate);
-  const totalIncome = day.income.reduce((s,e) => s+e.amount, 0);
-  const totalExpense = day.expenses.reduce((s,e) => s+e.amount, 0);
+  const dailyIncome = day.income.reduce((s,e) => s+Number(e.amount||0), 0);
+  const dailyExpense = day.expenses.reduce((s,e) => s+Number(e.amount||0), 0);
+  const dailyNet = dailyIncome - dailyExpense;
+  // Running totals include all logged days up to the selected date, so each day carries the balance forward.
+  let totalIncome = 0, totalExpense = 0;
+  Object.keys(finState.logs).filter(d => d <= finState.viewDate).sort().forEach(d => {
+    const log = finState.logs[d] || {};
+    totalIncome += (log.income || []).reduce((sum,e) => sum + Number(e.amount||0), 0);
+    totalExpense += (log.expenses || []).reduce((sum,e) => sum + Number(e.amount||0), 0);
+  });
   const net = totalIncome - totalExpense;
 
   document.getElementById('finTotalsGrid').innerHTML = `
-    <div class="sumcard"><div class="v" style="color:var(--win)">₹${Math.round(totalIncome)}</div><div class="l">Earned</div></div>
-    <div class="sumcard"><div class="v" style="color:var(--danger)">₹${Math.round(totalExpense)}</div><div class="l">Spent</div></div>
-    <div class="sumcard"><div class="v" style="color:${net>=0?'var(--win)':'var(--danger)'}">₹${Math.round(net)}</div><div class="l">Net</div></div>`;
+    <div class="sumcard"><div class="v" style="color:var(--win)">₹${Math.round(totalIncome)}</div><div class="l">Earned (running)</div></div>
+    <div class="sumcard"><div class="v" style="color:var(--danger)">₹${Math.round(totalExpense)}</div><div class="l">Spent (running)</div></div>
+    <div class="sumcard"><div class="v" style="color:${net>=0?'var(--win)':'var(--danger)'}">₹${Math.round(net)}</div><div class="l">Net (carried forward)</div></div>`;
+  document.getElementById('finDailyTotalsGrid').innerHTML = `
+    <div class="sumcard"><div class="v" style="color:var(--win)">₹${Math.round(dailyIncome)}</div><div class="l">Earned today</div></div>
+    <div class="sumcard"><div class="v" style="color:var(--danger)">₹${Math.round(dailyExpense)}</div><div class="l">Spent today</div></div>
+    <div class="sumcard"><div class="v" style="color:${dailyNet>=0?'var(--win)':'var(--danger)'}">₹${Math.round(dailyNet)}</div><div class="l">Net today</div></div>`;
 
-  document.getElementById('incomeSubtotal').textContent = `₹${Math.round(totalIncome)}`;
-  document.getElementById('expenseSubtotal').textContent = `₹${Math.round(totalExpense)}`;
+  document.getElementById('incomeSubtotal').textContent = `₹${Math.round(dailyIncome)}`;
+  document.getElementById('expenseSubtotal').textContent = `₹${Math.round(dailyExpense)}`;
 
   const incRows = document.getElementById('incomeRows');
   const sortedIncome = [...day.income].sort((a,b) => (a.ts||0) - (b.ts||0));
@@ -1984,8 +2000,11 @@ function syncExpDetailRow(){
   if(cfg){
     row.style.display = 'block';
     input.placeholder = cfg.label;
+    input.required = cat === 'Miscellaneous';
+    input.setAttribute('aria-label', cfg.label);
   }else{
     row.style.display = 'none';
+    input.required = false;
   }
 }
 document.getElementById('expCategory').addEventListener('change', syncExpDetailRow);
@@ -1996,6 +2015,11 @@ document.getElementById('expAddBtn').onclick = () => {
   const cat = document.getElementById('expCategory').value;
   let recipient = '';
   if(CATEGORY_DETAIL[cat]) recipient = document.getElementById('expRecipient').value.trim();
+  if(cat === 'Miscellaneous' && !recipient){
+    document.getElementById('expRecipient').focus();
+    document.getElementById('expRecipient').placeholder = 'Please describe this miscellaneous expense';
+    return;
+  }
   const now = new Date();
   getFinDay(finState.viewDate).expenses.push({ id:'exp'+Date.now()+Math.random().toString(36).slice(2,5), amount:amt, category:cat, recipient, ts: now.getTime(), timeLabel: now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) });
   document.getElementById('expAmount').value = '';
@@ -2707,6 +2731,11 @@ document.getElementById('saveQuickBtn').onclick = () => {
   if(!amt || amt <= 0) return;
   const cat = document.getElementById('expCategory').value;
   const recipient = CATEGORY_DETAIL[cat] ? document.getElementById('expRecipient').value.trim() : '';
+  if(cat === 'Miscellaneous' && !recipient){
+    document.getElementById('expRecipient').focus();
+    document.getElementById('expRecipient').placeholder = 'Please describe this miscellaneous expense';
+    return;
+  }
   finState.quick = finState.quick || [];
   finState.quick.push({ id: uid('q'), label: cat + (recipient ? ' · ' + recipient : '') + ' ₹' + Math.round(amt), amount: amt, category: cat, recipient });
   saveFinState(); renderQuickChips();
