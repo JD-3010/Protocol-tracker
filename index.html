@@ -50,6 +50,10 @@
   .navtab.active{background:var(--accent);color:#1c0d05;}
   .page{display:none;}
   .page.active{display:block;}
+  @media(max-width:520px){
+    .topnav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;position:relative;top:auto;}
+    .navtab{padding:10px 3px;font-size:9px;white-space:normal;min-height:36px;}
+  }
 
   /* HEADER */
   .top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;}
@@ -323,6 +327,7 @@
     <button class="navtab" data-page="finance">Finance</button>
     <button class="navtab" data-page="workout">Workout</button>
     <button class="navtab" data-page="macros">Macros</button>
+    <button class="navtab" data-page="settings">Settings</button>
   </div>
 
   <!-- ============ PAGE: PROTOCOL ============ -->
@@ -741,6 +746,17 @@
       </div>
 
     </div>
+  </section>
+
+  <!-- ============ PAGE: SETTINGS ============ -->
+  <section id="page-settings" class="page">
+    <div class="top">
+      <div>
+        <div class="eyebrow">Preferences & Data</div>
+        <h1>Settings</h1>
+      </div>
+    </div>
+    <div id="settingsMount"></div>
   </section>
 
 </div>
@@ -3059,9 +3075,9 @@ function renderDashboard(){
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
-#cloudPanel{display:none;position:fixed;z-index:99999;top:58px;right:12px;bottom:auto;width:min(390px,calc(100vw - 24px));max-height:calc(100dvh - 76px);overflow:auto;background:#101820;color:#f3f6f8;border:1px solid #40505d;border-radius:16px;padding:16px;box-shadow:0 12px 40px #0006;font:14px/1.45 Arial,sans-serif}
+#cloudPanel{display:block;position:static;z-index:auto;top:auto;right:auto;bottom:auto;width:100%;max-height:none;overflow:visible;background:#101820;color:#f3f6f8;border:1px solid #40505d;border-radius:16px;padding:16px;box-shadow:none;font:14px/1.45 Arial,sans-serif;margin-bottom:24px}
 #cloudPanel.open{display:block}
-#cloudSettingsToggle{position:fixed;z-index:100000;top:12px;right:12px;padding:10px 14px;border:1px solid #40505d;border-radius:12px;background:#101820;color:#f3f6f8;font:600 14px Arial,sans-serif;cursor:pointer;box-shadow:0 4px 14px #0003}
+#cloudSettingsToggle{display:none}
 #cloudSettingsToggle:focus-visible{outline:2px solid #8bd3ff;outline-offset:3px}
 #cloudPanel *{box-sizing:border-box}#cloudPanel h3{font-size:17px;margin:0 0 8px}#cloudPanel p{margin:6px 0;color:#c7d0d7}#cloudPanel label{display:block;margin:9px 0 4px;color:#dce4ea}#cloudPanel input,#cloudPanel select{width:100%;padding:9px;border-radius:8px;border:1px solid #657784;background:#f8fafc;color:#17212a;font:inherit}#cloudPanel button{padding:9px 11px;border:0;border-radius:8px;background:#8bd3ff;color:#07131c;font-weight:700;cursor:pointer;margin:5px 4px 0 0}#cloudPanel button.secondary{background:#344552;color:#fff}#cloudPanel .line{display:flex;gap:7px}#cloudPanel .line>*{flex:1;min-width:0}#cloudStatus{padding:8px;background:#1c2a35;border-radius:8px;margin:10px 0;color:#c9f3d4;overflow-wrap:anywhere}#cloudPanel .small{font-size:12px;color:#aebbc5}#cloudPanel details{margin-top:9px}#cloudPanel summary{cursor:pointer;color:#8bd3ff}#cloudPanel .cats{display:grid;grid-template-columns:1fr 1fr;gap:4px}#cloudPanel .cats label{display:flex;align-items:center;gap:6px;margin:4px 0}#cloudPanel .cats input{width:auto}
 
@@ -3136,6 +3152,14 @@ function renderDashboard(){
   const $ = id => document.getElementById(id);
   const settingsToggle = $('cloudSettingsToggle');
   const cloudPanel = $('cloudPanel');
+  // Render settings inside its own navigation page instead of as a floating overlay.
+  const settingsMount = $('settingsMount');
+  if (settingsMount && cloudPanel) {
+    settingsMount.appendChild(cloudPanel);
+    cloudPanel.classList.add('open');
+    cloudPanel.setAttribute('role', 'region');
+    cloudPanel.setAttribute('aria-label', 'Tracker settings');
+  }
   document.querySelectorAll('#cloudPanel .settingsTab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('#cloudPanel .settingsTab').forEach(t => {
@@ -3157,18 +3181,7 @@ function renderDashboard(){
     $('resetControls').append($('resetEverythingBtn'), $('resetConfirmRow'));
     resetBar.style.display = 'none';
   }
-  settingsToggle.addEventListener('click', () => {
-    const isOpen = cloudPanel.classList.toggle('open');
-    settingsToggle.setAttribute('aria-expanded', String(isOpen));
-    settingsToggle.textContent = isOpen ? '✕ Close' : '⚙️ Settings';
-  });
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && cloudPanel.classList.contains('open')) {
-      cloudPanel.classList.remove('open');
-      settingsToggle.setAttribute('aria-expanded', 'false');
-      settingsToggle.textContent = '⚙️ Settings';
-    }
-  });
+
   const status = msg => { $('cloudStatus').textContent = msg; };
   let client = null, currentUser = null, cloudReady = false, saveTimer = null, busy = false;
   const safeParse = (v, fallback={}) => { try { return v == null ? fallback : JSON.parse(v); } catch(e) { return fallback; } };
@@ -3202,7 +3215,7 @@ function renderDashboard(){
         if(!localMatches(data.payload)){
           // Cloud data wins when a saved cloud copy already exists; the user said this tracker is starting fresh.
           TRACKER_KEYS.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(data.payload,k)) localStorage.setItem(k,data.payload[k]); else localStorage.removeItem(k); });
-          status('Cloud data loaded. Refreshing the tracker…'); cloudReady=true; installStorageSync(); setTimeout(()=>location.reload(),500); return;
+          status('Cloud data loaded. Refresh the page manually only if any display has not updated.'); cloudReady=true; installStorageSync(); return;
         }
         status('Cloud data is up to date.');
       } else {
