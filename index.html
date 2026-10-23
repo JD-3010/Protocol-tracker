@@ -835,7 +835,8 @@ const CATS = [
   {key:'mental', name:'Mental', color:'var(--c-mental)', items:[
     ["10 minutes of meditation/journaling","daily"],["Write 3 things you're grateful for","daily"],
     ["Don't complain unnecessarily","daily"],["Don't compare your progress to someone else's","daily"],
-    ["Spend 20+ minutes doing something purely for yourself","daily"],["Do one uncomfortable thing every day","daily"]]},
+    ["Spend 20+ minutes doing something purely for yourself","daily"],["Do one uncomfortable thing every day","daily"],
+    ["Be conscious of just today","daily"],["Acknowledge the spirit in everything","daily"]]},
   {key:'life', name:'Life', color:'var(--c-life)', items:[
     ["Talk to someone you care about every day","daily"],["Spend time outdoors","daily"],
     ["Do something fun this week","weekly"],["Read at least 10 pages a day","daily"]]},
@@ -844,8 +845,49 @@ const CATS = [
 let idc = 0;
 CATS.forEach(cat => cat.items = cat.items.map(([txt,freq]) => ({id:'i'+(idc++), txt, freq})));
 const ALL_ITEMS = CATS.flatMap(c => c.items.map(it => ({...it, cat:c.key, catName:c.name, catColor:c.color})));
-const DAILY_ITEMS = ALL_ITEMS.filter(i => i.freq === 'daily');
-const WEEKLY_ITEMS = ALL_ITEMS.filter(i => i.freq === 'weekly');
+
+// Active habits selected by the user. All original habits remain in ALL_ITEMS
+// and existing stored checkmarks are preserved; only active habits count toward progress.
+const ACTIVE_ITEM_TEXTS = new Set([
+  'Wake up before 6:00 AM',
+  'No snoozing',
+  'Drink water after waking',
+  'No social media for the first 30 minutes',
+  'Make your bed',
+  'Do at least one 60-minute deep-work session',
+  'Keep your phone away during deep work',
+  'Complete 3 important tasks before 12 PM',
+  'Plan tomorrow before going to bed',
+  "Don't start the day with reels/shorts",
+  'Train 4–5× this week',
+  'Walk 8,000–10,000 steps daily',
+  'Do 10 minutes of mobility/stretching',
+  'Track your workouts',
+  'Hit your daily protein target',
+  'Drink 2–3+ L water, adjusted for your needs',
+  'Eat vegetables/fruit every day',
+  'No mindless snacking',
+  'Limit ultra-processed foods',
+  'Sleep 7–9 hours',
+  'Keep your sleep/wake time consistent',
+  'No caffeine late in the day',
+  'No phone in bed',
+  'Take 30 minutes to wind down before sleep',
+  'No phone while eating',
+  'No social media during deep work',
+  'One screen-free hour every day',
+  '10 minutes of meditation/journaling',
+  "Write 3 things you're grateful for",
+  'Be conscious of just today',
+  'Acknowledge the spirit in everything',
+  "Don't complain unnecessarily",
+  'Talk to someone you care about every day',
+  'Spend time outdoors',
+  'Read at least 10 pages a day'
+]);
+const ACTIVE_ITEMS = ALL_ITEMS.filter(i => ACTIVE_ITEM_TEXTS.has(i.txt));
+const DAILY_ITEMS = ACTIVE_ITEMS.filter(i => i.freq === 'daily');
+const WEEKLY_ITEMS = ACTIVE_ITEMS.filter(i => i.freq === 'weekly');
 const TOTAL_DAILY = DAILY_ITEMS.length;
 const TOTAL_WEEKLY = WEEKLY_ITEMS.length;
 const TOTAL_DAYS = 365;
@@ -1051,7 +1093,7 @@ function renderCategories(){
   list.innerHTML = '';
   const d = getDay(state.viewDay);
   CATS.forEach(cat => {
-    const dailyItems = cat.items.filter(it => it.freq === 'daily');
+    const dailyItems = cat.items.filter(it => it.freq === 'daily' && ACTIVE_ITEM_TEXTS.has(it.txt));
     if(!dailyItems.length) return;
     const checkedInCat = dailyItems.filter(it => d[it.id]).length;
     const det = document.createElement('details');
@@ -1117,7 +1159,7 @@ function renderStats(){
   const loggedDays = [];
   for(let n=1;n<=TOTAL_DAYS;n++){ if(dayHasData(n)) loggedDays.push(n); }
   CATS.forEach(cat => {
-    const dailyItems = cat.items.filter(it => it.freq === 'daily');
+    const dailyItems = cat.items.filter(it => it.freq === 'daily' && ACTIVE_ITEM_TEXTS.has(it.txt));
     if(!dailyItems.length) return;
     let total = 0, checked = 0;
     loggedDays.forEach(n => {
@@ -1272,19 +1314,36 @@ function renderStreak(){
 }
 
 let scoreboardMonth = null;
+function scoreboardBlocks(){
+  if(!state.startedAt) return [{m:1,start:1,end:30,label:'Month 1'}];
+  const groups = [];
+  for(let n=1; n<=TOTAL_DAYS; n++){
+    const d = dayDateStr(n);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    let group = groups[groups.length-1];
+    if(!group || group.key !== key){
+      group = {key, m:groups.length+1, start:n, end:n, label:d.toLocaleDateString(undefined,{month:'long',year:'numeric'})};
+      groups.push(group);
+    } else group.end = n;
+  }
+  return groups;
+}
 function currentMonthBlock(){
+  const blocks = scoreboardBlocks();
   const today = Math.min(todayIndex(), TOTAL_DAYS);
-  return MONTH_BLOCKS.find(b => today >= b.start && today <= b.end) || MONTH_BLOCKS[0];
+  return blocks.find(b => today >= b.start && today <= b.end) || blocks[0];
 }
 function renderMonthlyScoreboard(){
+  const blocks = scoreboardBlocks();
   const curBlock = currentMonthBlock();
   if(!scoreboardMonth) scoreboardMonth = curBlock.m;
-  const block = MONTH_BLOCKS.find(b => b.m === scoreboardMonth);
+  scoreboardMonth = Math.max(1, Math.min(scoreboardMonth, blocks.length));
+  const block = blocks.find(b => b.m === scoreboardMonth) || blocks[0];
   const today = Math.min(todayIndex(), TOTAL_DAYS);
 
-  document.getElementById('scoreboardMonthLine').textContent = `MONTH ${scoreboardMonth} / 12`;
+  document.getElementById('scoreboardMonthLine').textContent = block.label;
   const sd = dayDateStr(block.start), ed = dayDateStr(block.end);
-  document.getElementById('scoreboardMonthDate').textContent = `${sd.toLocaleDateString(undefined,{month:'short',day:'numeric'})} – ${ed.toLocaleDateString(undefined,{month:'short',day:'numeric'})}`;
+  document.getElementById('scoreboardMonthDate').textContent = `${sd.toLocaleDateString(undefined,{month:'short',day:'numeric'})} – ${ed.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}`;
   document.getElementById('prevScoreboardMonth').style.opacity = scoreboardMonth <= 1 ? .4 : 1;
   document.getElementById('nextScoreboardMonth').style.opacity = scoreboardMonth >= curBlock.m ? .4 : 1;
 
@@ -1303,7 +1362,8 @@ function renderMonthlyScoreboard(){
     else if(comp >= 1) lvl = 4;
     const activeCls = n === state.viewDay ? ' active' : '';
     const futureCls = n > today ? ' future' : '';
-    cellsHtml += `<div class="cell${activeCls}${futureCls}" ${lvl>0?`data-lvl="${lvl}"`:''} data-day="${n}">${n}</div>`;
+    const calendarDay = dayDateStr(n).getDate();
+    cellsHtml += `<div class="cell${activeCls}${futureCls}" ${lvl>0?`data-lvl="${lvl}"`:''} data-day="${n}" title="Protocol Day ${n}">${calendarDay}</div>`;
   }
   document.getElementById('monthlyScoreboardGrid').innerHTML = cellsHtml;
   const daysInBlock = block.end - block.start + 1;
